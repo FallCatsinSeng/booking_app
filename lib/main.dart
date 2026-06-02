@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'services/api_client.dart';
 import 'services/auth_provider.dart';
 import 'services/booking_api.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'services/notification_service.dart';
 import 'services/navigation_service.dart';
+import 'config/onesignal_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+
+  // OneSignal push notification init
+  OneSignal.initialize(OneSignalConfig.appId);
+  OneSignal.Notifications.requestPermission(true);
 
   await NotificationService().initialize();
   await NotificationService().requestPermissions();

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
@@ -14,12 +13,14 @@ import '../screens/admin_bookings_screen.dart';
 import '../models/booking.dart';
 import 'navigation_service.dart';
 
+/// Local-only notification service (no Firebase/FCM).
+/// Push notifications from the Laravel backend can be delivered via
+/// your own polling or a non-Firebase push provider in the future.
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
@@ -39,9 +40,13 @@ class NotificationService {
       '@mipmap/ic_launcher',
     );
     const iosSettings = DarwinInitializationSettings();
+    const linuxSettings = LinuxInitializationSettings(
+      defaultActionName: 'Open',
+    );
     const initSettings = InitializationSettings(
       android: androidSettings,
       iOS: iosSettings,
+      linux: linuxSettings,
     );
 
     await _localNotifications.initialize(
@@ -54,18 +59,6 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.createNotificationChannel(_channel);
-
-    // 3. FCM Foreground Handler
-    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-
-    // 4. FCM Background Click Handler
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
-
-    // 5. Handle Initial Message (if app was terminated)
-    RemoteMessage? initialMessage = await _fcm.getInitialMessage();
-    if (initialMessage != null) {
-      _handleMessageOpenedApp(initialMessage);
-    }
   }
 
   Future<void> requestPermissions() async {
@@ -76,86 +69,30 @@ class NotificationService {
           >();
       await plugin?.requestNotificationsPermission();
     }
-
-    NotificationSettings settings = await _fcm.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-
-    if (kDebugMode) {
-      print('User granted permission: ${settings.authorizationStatus}');
-    }
   }
 
-  Future<String?> getToken() async {
-    try {
-      String? token = await _fcm.getToken();
-      if (kDebugMode) {
-        print('FCM Token: $token');
-      }
-      return token;
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error getting FCM token: $e');
-      }
-      return null;
-    }
-  }
-
-  Future<void> subscribeToAdminTopic() async {
-    try {
-      await _fcm.subscribeToTopic('admin_notifications');
-      if (kDebugMode) {
-        print('Subscribed to admin_notifications topic');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error subscribing to admin topic: $e');
-      }
-    }
-  }
-
-  Future<void> unsubscribeFromAdminTopic() async {
-    try {
-      await _fcm.unsubscribeFromTopic('admin_notifications');
-      if (kDebugMode) {
-        print('Unsubscribed from admin_notifications topic');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error unsubscribing from admin topic: $e');
-      }
-    }
-  }
-
-  void _handleForegroundMessage(RemoteMessage message) {
-    RemoteNotification? notification = message.notification;
-    AndroidNotification? android = message.notification?.android;
-
-    if (notification != null && android != null) {
-      _localNotifications.show(
-        notification.hashCode,
-        notification.title,
-        notification.body,
-        NotificationDetails(
-          android: AndroidNotificationDetails(
-            _channel.id,
-            _channel.name,
-            channelDescription: _channel.description,
-            icon: android.smallIcon,
-            priority: Priority.high,
-            importance: Importance.max,
-          ),
+  /// Show an immediate local notification.
+  Future<void> showNotification({
+    required int id,
+    required String title,
+    required String body,
+    NotificationPayload? payload,
+  }) async {
+    await _localNotifications.show(
+      id,
+      title,
+      body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channel.id,
+          _channel.name,
+          channelDescription: _channel.description,
+          importance: Importance.high,
+          priority: Priority.high,
         ),
-        payload: jsonEncode(message.data),
-      );
-    }
-  }
-
-  void _handleMessageOpenedApp(RemoteMessage message) {
-    final payload = NotificationPayload.fromJson(message.data);
-    _navigateBasedOnPayload(payload);
+      ),
+      payload: payload != null ? jsonEncode(payload.toJson()) : null,
+    );
   }
 
   void _onNotificationTapped(NotificationResponse response) {
@@ -188,7 +125,6 @@ class NotificationService {
         }
         break;
       case NotificationType.bookingEnded:
-        // Could navigate to history or detail
         if (payload.bookingId != null) {
           NavigationService.navigateToPage(
             BookingDetailScreen(code: payload.bookingId!.toString()),
@@ -196,12 +132,11 @@ class NotificationService {
         }
         break;
       default:
-        // Do nothing or go home
         break;
     }
   }
 
-  /// Schedule a notification locally (e.g., 15 mins before end)
+  /// Schedule a notification locally (e.g., 15 mins before booking end).
   Future<void> scheduleNotification({
     required int id,
     required String title,
@@ -234,13 +169,12 @@ class NotificationService {
     if (booking.bookingDate == null ||
         booking.endTime.isEmpty ||
         booking.status == 'cancelled' ||
-        booking.status == 'rejected')
-      return;
+        booking.status == 'rejected') return;
     try {
       final endTimeParts = booking.endTime.split(':');
       final date = DateTime.parse(booking.bookingDate!);
-      int hour = int.parse(endTimeParts[0]);
-      int min = int.parse(endTimeParts[1]);
+      final hour = int.parse(endTimeParts[0]);
+      final min = int.parse(endTimeParts[1]);
 
       final endDateTime = DateTime(date.year, date.month, date.day, hour, min);
       if (endDateTime.isBefore(DateTime.now())) return;
@@ -251,7 +185,7 @@ class NotificationService {
           id: booking.id * 10,
           title: 'Waktu Hampir Habis',
           body:
-              'Reservasi \${booking.facility?.name ?? "Fasilitas"} akan berakhir dalam 15 menit.',
+              'Reservasi ${booking.facility?.name ?? "Fasilitas"} akan berakhir dalam 15 menit.',
           scheduledDate: reminderTime,
           payload: NotificationPayload(
             type: NotificationType.bookingReminder,
