@@ -21,7 +21,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
     _future = context.read<BookingApi>().myBookings();
   }
 
-  void _reload() => setState(() => _future = context.read<BookingApi>().myBookings());
+  void _reload() => setState(() {
+    _future = context.read<BookingApi>().myBookings();
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -35,18 +37,26 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
           }
           if (snap.hasError) {
             return Center(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Text(snap.error.toString(), textAlign: TextAlign.center),
-                TextButton(onPressed: _reload, child: const Text('Coba lagi')),
-              ]),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(snap.error.toString(), textAlign: TextAlign.center),
+                  TextButton(
+                    onPressed: _reload,
+                    child: const Text('Coba lagi'),
+                  ),
+                ],
+              ),
             );
           }
           final bookings = snap.data ?? [];
           if (bookings.isEmpty) {
-            return ListView(children: const [
-              SizedBox(height: 120),
-              Center(child: Text('Belum ada reservasi.')),
-            ]);
+            return ListView(
+              children: const [
+                SizedBox(height: 120),
+                Center(child: Text('Belum ada reservasi.')),
+              ],
+            );
           }
           return ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -57,14 +67,22 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                 margin: const EdgeInsets.only(bottom: 10),
                 child: ListTile(
                   title: Text(b.facility?.name ?? b.bookingCode),
-                  subtitle: Text('${b.bookingDate ?? ''} • ${b.startTime}-${b.endTime}'),
-                  trailing: StatusChip(label: b.statusLabel, color: b.statusColor),
+                  subtitle: Text(
+                    '${b.bookingDate ?? ''} • ${b.startTime}-${b.endTime}',
+                  ),
+                  trailing: StatusChip(
+                    label: b.statusLabel,
+                    color: b.statusColor,
+                  ),
                   onTap: () async {
-                    await Navigator.push(
+                    final changed = await Navigator.push<bool>(
                       context,
-                      MaterialPageRoute(builder: (_) => BookingDetailScreen(code: b.bookingCode)),
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            BookingDetailScreen(code: b.bookingCode),
+                      ),
                     );
-                    _reload();
+                    if (changed == true) _reload();
                   },
                 ),
               );
