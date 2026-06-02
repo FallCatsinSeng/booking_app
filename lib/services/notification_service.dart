@@ -11,6 +11,7 @@ import 'package:timezone/timezone.dart' as tz;
 import '../models/notification_payload.dart';
 import '../screens/booking_detail_screen.dart';
 import '../screens/admin_bookings_screen.dart';
+import '../models/booking.dart';
 import 'navigation_service.dart';
 
 class NotificationService {
@@ -19,7 +20,8 @@ class NotificationService {
   NotificationService._internal();
 
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'high_importance_channel',
@@ -33,9 +35,14 @@ class NotificationService {
     tz.initializeTimeZones();
 
     // 2. Local Notifications Setup
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const iosSettings = DarwinInitializationSettings();
-    const initSettings = InitializationSettings(android: androidSettings, iOS: iosSettings);
+    const initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
 
     await _localNotifications.initialize(
       initSettings,
@@ -43,7 +50,9 @@ class NotificationService {
     );
 
     await _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.createNotificationChannel(_channel);
 
     // 3. FCM Foreground Handler
@@ -61,8 +70,10 @@ class NotificationService {
 
   Future<void> requestPermissions() async {
     if (Platform.isAndroid) {
-      final plugin = _localNotifications.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
+      final plugin = _localNotifications
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       await plugin?.requestNotificationsPermission();
     }
 
@@ -89,6 +100,32 @@ class NotificationService {
         print('Error getting FCM token: $e');
       }
       return null;
+    }
+  }
+
+  Future<void> subscribeToAdminTopic() async {
+    try {
+      await _fcm.subscribeToTopic('admin_notifications');
+      if (kDebugMode) {
+        print('Subscribed to admin_notifications topic');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error subscribing to admin topic: $e');
+      }
+    }
+  }
+
+  Future<void> unsubscribeFromAdminTopic() async {
+    try {
+      await _fcm.unsubscribeFromTopic('admin_notifications');
+      if (kDebugMode) {
+        print('Unsubscribed from admin_notifications topic');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error unsubscribing from admin topic: $e');
+      }
     }
   }
 
@@ -135,17 +172,27 @@ class NotificationService {
       case NotificationType.bookingRejected:
       case NotificationType.bookingReminder:
         if (payload.bookingId != null) {
-          NavigationService.navigateToPage(BookingDetailScreen(bookingId: payload.bookingId!));
+          NavigationService.navigateToPage(
+            BookingDetailScreen(code: payload.bookingId!.toString()),
+          );
         }
         break;
       case NotificationType.newBookingRequest:
       case NotificationType.bookingCancelled:
-        NavigationService.navigateToPage(const AdminBookingsScreen());
+        if (payload.bookingId != null) {
+          NavigationService.navigateToPage(
+            BookingDetailScreen(code: payload.bookingId!.toString()),
+          );
+        } else {
+          NavigationService.navigateToPage(const AdminBookingsScreen());
+        }
         break;
       case NotificationType.bookingEnded:
         // Could navigate to history or detail
         if (payload.bookingId != null) {
-          NavigationService.navigateToPage(BookingDetailScreen(bookingId: payload.bookingId!));
+          NavigationService.navigateToPage(
+            BookingDetailScreen(code: payload.bookingId!.toString()),
+          );
         }
         break;
       default:
@@ -177,9 +224,59 @@ class NotificationService {
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
       payload: jsonEncode(payload.toJson()),
     );
+  }
+
+  Future<void> scheduleBookingReminders(Booking booking) async {
+    if (booking.bookingDate == null ||
+        booking.endTime.isEmpty ||
+        booking.status == 'cancelled' ||
+        booking.status == 'rejected')
+      return;
+    try {
+      final endTimeParts = booking.endTime.split(':');
+      final date = DateTime.parse(booking.bookingDate!);
+      int hour = int.parse(endTimeParts[0]);
+      int min = int.parse(endTimeParts[1]);
+
+      final endDateTime = DateTime(date.year, date.month, date.day, hour, min);
+      if (endDateTime.isBefore(DateTime.now())) return;
+
+      final reminderTime = endDateTime.subtract(const Duration(minutes: 15));
+      if (reminderTime.isAfter(DateTime.now())) {
+        await scheduleNotification(
+          id: booking.id * 10,
+          title: 'Waktu Hampir Habis',
+          body:
+              'Reservasi \${booking.facility?.name ?? "Fasilitas"} akan berakhir dalam 15 menit.',
+          scheduledDate: reminderTime,
+          payload: NotificationPayload(
+            type: NotificationType.bookingReminder,
+            bookingId: booking.id,
+          ),
+        );
+      }
+
+      if (endDateTime.isAfter(DateTime.now())) {
+        await scheduleNotification(
+          id: booking.id * 10 + 1,
+          title: 'Waktu Habis',
+          body: 'Waktu reservasi Anda telah berakhir.',
+          scheduledDate: endDateTime,
+          payload: NotificationPayload(
+            type: NotificationType.bookingEnded,
+            bookingId: booking.id,
+          ),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error scheduling reminders: $e');
+      }
+    }
   }
 
   Future<void> cancelAll() async {

@@ -2,6 +2,7 @@ import '../models/booking.dart';
 import '../models/category.dart';
 import '../models/facility.dart';
 import 'api_client.dart';
+import 'notification_service.dart';
 
 /// Wraps all data endpoints. Laravel JsonResource wraps payloads in {"data": ...}.
 class BookingApi {
@@ -50,13 +51,24 @@ class BookingApi {
   // ── Bookings (user) ──────────────────────────────────────
   Future<List<Booking>> myBookings() async {
     final res = await api.get('/bookings');
-    return _list(
+    final list = _list(
       res,
     ).map((e) => Booking.fromJson(e as Map<String, dynamic>)).toList();
+    for (var b in list) {
+      if (b.status == 'approved' || b.status == 'active') {
+        NotificationService().scheduleBookingReminders(b);
+      }
+    }
+    return list;
   }
 
-  Future<Booking> booking(String code) async =>
-      Booking.fromJson(_single(await api.get('/bookings/$code')));
+  Future<Booking> booking(String code) async {
+    final b = Booking.fromJson(_single(await api.get('/bookings/$code')));
+    if (b.status == 'approved' || b.status == 'active') {
+      NotificationService().scheduleBookingReminders(b);
+    }
+    return b;
+  }
 
   Future<Booking> createBooking({
     required int facilityId,

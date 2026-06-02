@@ -11,7 +11,13 @@ class ApiConfig {
 
   static String get baseUrl {
     if (_override.isNotEmpty) return _override;
-    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:8000/api';
-    return 'http://localhost:8000/api';
+
+    // Untuk Android Emulator, gunakan 10.0.2.2 agar lebih stabil
+    if (!kIsWeb && Platform.isAndroid) {
+      return 'http://10.0.2.2:8000/api';
+    }
+
+    // IP Address komputer Anda untuk akses dari luar emulator/web
+    return 'http://192.168.49.222:8000/api';
   }
 }

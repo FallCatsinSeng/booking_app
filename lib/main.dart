@@ -5,15 +5,26 @@ import 'services/auth_provider.dart';
 import 'services/booking_api.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'services/notification_service.dart';
+import 'services/navigation_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+
+  await NotificationService().initialize();
+  await NotificationService().requestPermissions();
+
   final apiClient = ApiClient();
   runApp(
     MultiProvider(
       providers: [
         Provider<ApiClient>.value(value: apiClient),
         Provider<BookingApi>(create: (_) => BookingApi(apiClient)),
-        ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider(apiClient)),
+        ChangeNotifierProvider<AuthProvider>(
+          create: (_) => AuthProvider(apiClient),
+        ),
       ],
       child: const BookingApp(),
     ),
@@ -26,6 +37,7 @@ class BookingApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: NavigationService.navigatorKey,
       title: 'Reservasi Fasilitas',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import 'api_client.dart';
+import 'notification_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   static const _tokenKey = 'auth_token';
@@ -27,6 +28,9 @@ class AuthProvider extends ChangeNotifier {
       try {
         final data = await api.get('/auth/me');
         _user = User.fromJson(data['user'] as Map<String, dynamic>);
+        if (isAdmin) {
+          NotificationService().subscribeToAdminTopic();
+        }
       } catch (_) {
         await _clearToken();
       }
@@ -36,24 +40,37 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> login(String email, String password) async {
-    final data = await api.post('/auth/login', body: {'email': email, 'password': password});
+    final data = await api.post(
+      '/auth/login',
+      body: {'email': email, 'password': password},
+    );
     await _onAuthenticated(data);
   }
 
   Future<void> register(String name, String email, String password) async {
-    final data = await api.post('/auth/register', body: {
-      'name': name,
-      'email': email,
-      'password': password,
-      'password_confirmation': password,
-    });
+    final data = await api.post(
+      '/auth/register',
+      body: {
+        'name': name,
+        'email': email,
+        'password': password,
+        'password_confirmation': password,
+      },
+    );
     await _onAuthenticated(data);
   }
 
   Future<void> logout() async {
     try {
       await api.post('/auth/logout');
-    } catch (_) {/* ignore network errors on logout */}
+    } catch (_) {
+      /* ignore network errors on logout */
+    }
+
+    if (isAdmin) {
+      await NotificationService().unsubscribeFromAdminTopic();
+    }
+
     await _clearToken();
     _user = null;
     notifyListeners();
@@ -65,6 +82,11 @@ class AuthProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
     _user = User.fromJson(data['user'] as Map<String, dynamic>);
+
+    if (isAdmin) {
+      NotificationService().subscribeToAdminTopic();
+    }
+
     notifyListeners();
   }
 
