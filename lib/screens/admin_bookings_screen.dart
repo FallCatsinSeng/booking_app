@@ -21,7 +21,9 @@ class _AdminBookingsScreenState extends State<AdminBookingsScreen> {
     _future = _api.adminBookings();
   }
 
-  void _reload() => setState(() => _future = _api.adminBookings());
+  void _reload() => setState(() {
+    _future = _api.adminBookings();
+  });
 
   Future<void> _update(Booking b, String status) async {
     String? notes;
@@ -46,7 +48,10 @@ class _AdminBookingsScreenState extends State<AdminBookingsScreen> {
         title: const Text('Alasan (wajib)'),
         content: TextField(controller: c, maxLines: 3),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
           FilledButton(
             onPressed: () {
               if (c.text.trim().isNotEmpty) Navigator.pop(ctx, c.text.trim());
@@ -59,7 +64,8 @@ class _AdminBookingsScreenState extends State<AdminBookingsScreen> {
   }
 
   void _snack(String msg) {
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    if (mounted)
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
@@ -74,10 +80,16 @@ class _AdminBookingsScreenState extends State<AdminBookingsScreen> {
           }
           if (snap.hasError) {
             return Center(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Text(snap.error.toString(), textAlign: TextAlign.center),
-                TextButton(onPressed: _reload, child: const Text('Coba lagi')),
-              ]),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(snap.error.toString(), textAlign: TextAlign.center),
+                  TextButton(
+                    onPressed: _reload,
+                    child: const Text('Coba lagi'),
+                  ),
+                ],
+              ),
             );
           }
           final bookings = snap.data ?? [];
@@ -99,32 +111,86 @@ class _AdminBookingsScreenState extends State<AdminBookingsScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Expanded(child: Text(b.facility?.name ?? b.bookingCode,
-                              style: const TextStyle(fontWeight: FontWeight.bold))),
-                          StatusChip(label: b.statusLabel, color: b.statusColor),
+                          Expanded(
+                            child: Text(
+                              b.facility?.name ?? b.bookingCode,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          StatusChip(
+                            label: b.statusLabel,
+                            color: b.statusColor,
+                          ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Text('Oleh: ${b.userName ?? '-'}'),
-                      Text('${b.bookingDate ?? ''} • ${b.startTime}-${b.endTime}'),
-                      Text(b.purpose, maxLines: 2, overflow: TextOverflow.ellipsis),
+                      Text(
+                        '${b.bookingDate ?? ''} • ${b.startTime}-${b.endTime}',
+                      ),
+                      Text(
+                        b.purpose,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       if (b.status == 'pending')
                         OverflowBar(
                           children: [
                             TextButton(
-                                onPressed: () => _update(b, 'approved'),
-                                child: const Text('Setujui')),
+                              onPressed: () => _update(b, 'approved'),
+                              child: const Text('Setujui'),
+                            ),
                             TextButton(
-                                onPressed: () => _update(b, 'rejected'),
-                                child: const Text('Tolak', style: TextStyle(color: Colors.red))),
+                              onPressed: () => _update(b, 'rejected'),
+                              child: const Text(
+                                'Tolak',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ),
                           ],
                         )
                       else if (b.status == 'approved')
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
-                              onPressed: () => _update(b, 'cancelled'),
-                              child: const Text('Batalkan', style: TextStyle(color: Colors.red))),
+                            onPressed: () => _update(b, 'cancelled'),
+                            child: const Text(
+                              'Batalkan',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        )
+                      else if (b.status == 'cancelled' ||
+                          b.status == 'rejected')
+                        Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                b.status == 'rejected'
+                                    ? 'Ditolak'
+                                    : (b.cancelledByLabel ?? 'Dibatalkan'),
+                                style: const TextStyle(
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              if (b.notes != null && b.notes!.isNotEmpty)
+                                Text(
+                                  'Alasan: ${b.notes}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                            ],
+                          ),
                         ),
                     ],
                   ),

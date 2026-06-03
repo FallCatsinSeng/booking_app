@@ -1,19 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'services/api_client.dart';
 import 'services/auth_provider.dart';
 import 'services/booking_api.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'services/notification_service.dart';
+import 'services/navigation_service.dart';
+import 'config/onesignal_config.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // OneSignal push notification init
+  OneSignal.initialize(OneSignalConfig.appId);
+  OneSignal.Notifications.requestPermission(true);
+
+  // Debug: log player ID setelah subscription ready
+  OneSignal.User.pushSubscription.addObserver((state) {
+    debugPrint('=== OneSignal Player ID: ${state.current.id} ===');
+    debugPrint('=== OneSignal opted in: ${state.current.optedIn} ===');
+  });
+  // Log current ID jika sudah ada
+  debugPrint('=== OneSignal current ID: ${OneSignal.User.pushSubscription.id} ===');
+
+  await NotificationService().initialize();
+  await NotificationService().requestPermissions();
+
   final apiClient = ApiClient();
   runApp(
     MultiProvider(
       providers: [
         Provider<ApiClient>.value(value: apiClient),
         Provider<BookingApi>(create: (_) => BookingApi(apiClient)),
-        ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider(apiClient)),
+        ChangeNotifierProvider<AuthProvider>(
+          create: (_) => AuthProvider(apiClient),
+        ),
       ],
       child: const BookingApp(),
     ),
@@ -26,6 +49,7 @@ class BookingApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: NavigationService.navigatorKey,
       title: 'Reservasi Fasilitas',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

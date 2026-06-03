@@ -25,17 +25,48 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
     _future = _api.booking(widget.code);
   }
 
-  void _reload() => setState(() => _future = _api.booking(widget.code));
+  void _reload() => setState(() {
+    _future = _api.booking(widget.code);
+  });
 
   Future<void> _cancel() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Konfirmasi Pembatalan'),
+        content: const Text(
+          'Apakah Anda yakin ingin membatalkan reservasi ini?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Tidak'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Ya, Batalkan'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
     final notes = await _promptText('Alasan Pembatalan', 'Minimal 5 karakter');
     if (notes == null) return;
     try {
       await _api.cancelBooking(widget.code, notes);
       _reload();
       _snack('Reservasi dibatalkan.');
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      _snack(e.toString());
+      if (e.toString().toLowerCase().contains('unauthorized')) {
+        _snack(
+          'Aksi tidak diizinkan. Silakan periksa kembali hak akses Anda atau hubungi admin.',
+        );
+      } else {
+        _snack(e.toString());
+      }
     }
   }
 
@@ -49,6 +80,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
       await _api.rateBooking(widget.code, result.rating, result.review);
       _reload();
       _snack('Terima kasih atas penilaian Anda!');
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       _snack(e.toString());
     }
@@ -65,7 +97,9 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
       if (!mounted) return;
       await Navigator.push<bool>(
         context,
-        MaterialPageRoute(builder: (_) => PaymentScreen(redirectUrl: redirectUrl)),
+        MaterialPageRoute(
+          builder: (_) => PaymentScreen(redirectUrl: redirectUrl),
+        ),
       );
       // Status is confirmed server-side via the Midtrans webhook; refresh.
       _reload();
@@ -97,10 +131,14 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
           decoration: InputDecoration(hintText: hint),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
           FilledButton(
             onPressed: () {
-              if (controller.text.trim().length >= 5) Navigator.pop(ctx, controller.text.trim());
+              if (controller.text.trim().length >= 5)
+                Navigator.pop(ctx, controller.text.trim());
             },
             child: const Text('Kirim'),
           ),
@@ -110,16 +148,17 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   }
 
   void _snack(String msg) {
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    if (mounted)
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   String _paymentLabel(String? status) => switch (status) {
-        'paid' => 'Lunas',
-        'pending' => 'Menunggu pembayaran',
-        'failed' => 'Gagal',
-        'expired' => 'Kedaluwarsa',
-        _ => 'Belum dibayar',
-      };
+    'paid' => 'Lunas',
+    'pending' => 'Menunggu pembayaran',
+    'failed' => 'Gagal',
+    'expired' => 'Kedaluwarsa',
+    _ => 'Belum dibayar',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -141,26 +180,77 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('#${b.bookingCode}',
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
+                  Text(
+                    '#${b.bookingCode}',
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                    ),
+                  ),
                   StatusChip(label: b.statusLabel, color: b.statusColor),
                 ],
               ),
               const SizedBox(height: 20),
-              const Text('Status Reservasi', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'Status Reservasi',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 16),
               BookingProgress(booking: b),
               const Divider(height: 32),
               _row('Fasilitas', b.facility?.name ?? '-'),
               _row('Lokasi', b.facility?.location ?? '-'),
               _row('Tanggal', b.bookingDate ?? '-'),
-              _row('Waktu', '${b.startTime} - ${b.endTime}  (${b.duration ?? ''})'),
+              _row(
+                'Waktu',
+                '${b.startTime} - ${b.endTime}  (${b.duration ?? ''})',
+              ),
               _row('Peserta', '${b.attendeesCount} orang'),
               _row('Keperluan', b.purpose),
               if (b.facility?.isPaid ?? false)
                 _row('Pembayaran', _paymentLabel(b.paymentStatus)),
-              if (b.notes != null && b.notes!.isNotEmpty) _row('Catatan', b.notes!),
-              if (b.rating != null) _row('Penilaian', '${b.rating} / 5 — ${b.review ?? ''}'),
+              if (b.notes != null && b.notes!.isNotEmpty)
+                _row('Catatan', b.notes!),
+              if (b.status == 'cancelled') ...[
+                const Divider(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.red.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.cancel, color: Colors.red, size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            b.cancelledByLabel ?? 'Dibatalkan',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (b.notes != null && b.notes!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Alasan: ${b.notes}',
+                          style: TextStyle(color: Colors.grey[700]),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+              if (b.rating != null)
+                _row('Penilaian', '${b.rating} / 5 — ${b.review ?? ''}'),
               const SizedBox(height: 20),
               // Pay: paid facility, approved/pending, not yet settled.
               if ((b.facility?.isPaid ?? false) &&
@@ -188,17 +278,25 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
               if (b.isCheckedIn)
                 const Padding(
                   padding: EdgeInsets.only(bottom: 12),
-                  child: Row(children: [
-                    Icon(Icons.check_circle, color: Colors.green, size: 20),
-                    SizedBox(width: 8),
-                    Text('Sudah check-in', style: TextStyle(color: Colors.green)),
-                  ]),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Sudah check-in',
+                        style: TextStyle(color: Colors.green),
+                      ),
+                    ],
+                  ),
                 ),
               if (b.isCancellable)
                 OutlinedButton.icon(
                   onPressed: _cancel,
                   icon: const Icon(Icons.cancel, color: Colors.red),
-                  label: const Text('Batalkan Reservasi', style: TextStyle(color: Colors.red)),
+                  label: const Text(
+                    'Batalkan Reservasi',
+                    style: TextStyle(color: Colors.red),
+                  ),
                 ),
               if (b.status == 'completed' && b.rating == null)
                 FilledButton.icon(
@@ -214,15 +312,23 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   }
 
   Widget _row(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(width: 90, child: Text(label, style: const TextStyle(color: Colors.grey))),
-            Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500))),
-          ],
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 90,
+          child: Text(label, style: const TextStyle(color: Colors.grey)),
         ),
-      );
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _RatingDialog extends StatefulWidget {
@@ -255,23 +361,34 @@ class _RatingDialogState extends State<_RatingDialog> {
               final star = i + 1;
               return IconButton(
                 onPressed: () => setState(() => _rating = star),
-                icon: Icon(star <= _rating ? Icons.star : Icons.star_border, color: Colors.amber),
+                icon: Icon(
+                  star <= _rating ? Icons.star : Icons.star_border,
+                  color: Colors.amber,
+                ),
               );
             }),
           ),
           TextField(
             controller: _review,
             maxLines: 2,
-            decoration: const InputDecoration(hintText: 'Ulasan (min. 5 karakter)'),
+            decoration: const InputDecoration(
+              hintText: 'Ulasan (min. 5 karakter)',
+            ),
           ),
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Batal'),
+        ),
         FilledButton(
           onPressed: () {
             if (_review.text.trim().length >= 5) {
-              Navigator.pop(context, (rating: _rating, review: _review.text.trim()));
+              Navigator.pop(context, (
+                rating: _rating,
+                review: _review.text.trim(),
+              ));
             }
           },
           child: const Text('Kirim'),

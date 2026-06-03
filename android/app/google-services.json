@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "717261820359",
+    "project_id": "bkfsi-3cce4",
+    "storage_bucket": "bkfsi-3cce4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:717261820359:android:9c6315eb9c8b28b2ac49e2",
+        "android_client_info": {
+          "package_name": "com.kampus.booking_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDcc2y3nLGOvyKGrmfCm3CfTiEVpzf4Yl0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

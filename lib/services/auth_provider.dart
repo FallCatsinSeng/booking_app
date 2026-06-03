@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import 'api_client.dart';
@@ -12,6 +13,7 @@ class AuthProvider extends ChangeNotifier {
 
   AuthProvider(this.api) {
     _restore();
+    _listenPlayerIdChanges();
   }
 
   User? get user => _user;
@@ -27,6 +29,8 @@ class AuthProvider extends ChangeNotifier {
       try {
         final data = await api.get('/auth/me');
         _user = User.fromJson(data['user'] as Map<String, dynamic>);
+        // Sync player ID in case it changed while logged out
+        _syncPlayerId();
       } catch (_) {
         await _clearToken();
       }
@@ -35,25 +39,49 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Listen for OneSignal subscription changes (player ID can change).
+  void _listenPlayerIdChanges() {
+    OneSignal.User.pushSubscription.addObserver((state) {
+      if (isAuthenticated && state.current.id != null) {
+        _syncPlayerId();
+      }
+    });
+  }
+
   Future<void> login(String email, String password) async {
-    final data = await api.post('/auth/login', body: {'email': email, 'password': password});
+    final playerId = OneSignal.User.pushSubscription.id;
+    final data = await api.post(
+      '/auth/login',
+      body: {
+        'email': email,
+        'password': password,
+        if (playerId != null) 'player_id': playerId,
+      },
+    );
     await _onAuthenticated(data);
   }
 
   Future<void> register(String name, String email, String password) async {
-    final data = await api.post('/auth/register', body: {
-      'name': name,
-      'email': email,
-      'password': password,
-      'password_confirmation': password,
-    });
+    final playerId = OneSignal.User.pushSubscription.id;
+    final data = await api.post(
+      '/auth/register',
+      body: {
+        'name': name,
+        'email': email,
+        'password': password,
+        'password_confirmation': password,
+        if (playerId != null) 'player_id': playerId,
+      },
+    );
     await _onAuthenticated(data);
   }
 
   Future<void> logout() async {
     try {
       await api.post('/auth/logout');
-    } catch (_) {/* ignore network errors on logout */}
+    } catch (_) {
+      /* ignore network errors on logout */
+    }
     await _clearToken();
     _user = null;
     notifyListeners();
@@ -66,6 +94,39 @@ class AuthProvider extends ChangeNotifier {
     await prefs.setString(_tokenKey, token);
     _user = User.fromJson(data['user'] as Map<String, dynamic>);
     notifyListeners();
+
+    // Tunggu OneSignal player ID ready (bisa delay beberapa detik setelah init)
+    _syncPlayerIdWithRetry();
+  }
+
+  /// Coba sync player ID dengan retry karena OneSignal butuh waktu untuk register.
+  Future<void> _syncPlayerIdWithRetry() async {
+    for (int i = 0; i < 5; i++) {
+      await Future.delayed(Duration(seconds: i == 0 ? 2 : 3));
+      final playerId = OneSignal.User.pushSubscription.id;
+      if (playerId != null && playerId.isNotEmpty) {
+        await _syncPlayerId();
+        return;
+      }
+      debugPrint('=== ONESIGNAL retry $i: player ID still null ===');
+    }
+  }
+
+  /// Kirim player ID terbaru ke backend (fire-and-forget).
+  Future<void> _syncPlayerId() async {
+    try {
+      final playerId = OneSignal.User.pushSubscription.id;
+      final optedIn = OneSignal.User.pushSubscription.optedIn;
+      debugPrint('=== ONESIGNAL sync: playerId=$playerId, optedIn=$optedIn ===');
+      if (playerId != null && playerId.isNotEmpty) {
+        final result = await api.post('/auth/player-id', body: {'player_id': playerId});
+        debugPrint('=== ONESIGNAL player-id saved to server: $result ===');
+      } else {
+        debugPrint('=== ONESIGNAL player ID is null/empty, skipping sync ===');
+      }
+    } catch (e) {
+      debugPrint('=== ONESIGNAL sync error: $e ===');
+    }
   }
 
   Future<void> _clearToken() async {
