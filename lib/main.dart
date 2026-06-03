@@ -17,6 +17,14 @@ void main() async {
   OneSignal.initialize(OneSignalConfig.appId);
   OneSignal.Notifications.requestPermission(true);
 
+  // Debug: log player ID setelah subscription ready
+  OneSignal.User.pushSubscription.addObserver((state) {
+    debugPrint('=== OneSignal Player ID: ${state.current.id} ===');
+    debugPrint('=== OneSignal opted in: ${state.current.optedIn} ===');
+  });
+  // Log current ID jika sudah ada
+  debugPrint('=== OneSignal current ID: ${OneSignal.User.pushSubscription.id} ===');
+
   await NotificationService().initialize();
   await NotificationService().requestPermissions();
 

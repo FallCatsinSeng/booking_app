@@ -94,17 +94,38 @@ class AuthProvider extends ChangeNotifier {
     await prefs.setString(_tokenKey, token);
     _user = User.fromJson(data['user'] as Map<String, dynamic>);
     notifyListeners();
+
+    // Tunggu OneSignal player ID ready (bisa delay beberapa detik setelah init)
+    _syncPlayerIdWithRetry();
+  }
+
+  /// Coba sync player ID dengan retry karena OneSignal butuh waktu untuk register.
+  Future<void> _syncPlayerIdWithRetry() async {
+    for (int i = 0; i < 5; i++) {
+      await Future.delayed(Duration(seconds: i == 0 ? 2 : 3));
+      final playerId = OneSignal.User.pushSubscription.id;
+      if (playerId != null && playerId.isNotEmpty) {
+        await _syncPlayerId();
+        return;
+      }
+      debugPrint('=== ONESIGNAL retry $i: player ID still null ===');
+    }
   }
 
   /// Kirim player ID terbaru ke backend (fire-and-forget).
   Future<void> _syncPlayerId() async {
     try {
       final playerId = OneSignal.User.pushSubscription.id;
-      if (playerId != null) {
-        await api.post('/auth/player-id', body: {'player_id': playerId});
+      final optedIn = OneSignal.User.pushSubscription.optedIn;
+      debugPrint('=== ONESIGNAL sync: playerId=$playerId, optedIn=$optedIn ===');
+      if (playerId != null && playerId.isNotEmpty) {
+        final result = await api.post('/auth/player-id', body: {'player_id': playerId});
+        debugPrint('=== ONESIGNAL player-id saved to server: $result ===');
+      } else {
+        debugPrint('=== ONESIGNAL player ID is null/empty, skipping sync ===');
       }
     } catch (e) {
-      if (kDebugMode) print('OneSignal sync error: $e');
+      debugPrint('=== ONESIGNAL sync error: $e ===');
     }
   }
 
