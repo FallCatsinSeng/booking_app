@@ -41,6 +41,7 @@ dependencies:
   geolocator: ^14.0.2
   image_picker: ^1.2.2
   webview_flutter: ^4.13.1
+  url_launcher: ^6.3.0
   flutter_local_notifications: ^18.0.1
   timezone: ^0.9.4
   onesignal_flutter: ^5.2.5

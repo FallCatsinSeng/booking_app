@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
+import 'package:flutter/foundation.dart';
 import 'services/api_client.dart';
 import 'services/auth_provider.dart';
 import 'services/booking_api.dart';
@@ -14,16 +15,18 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // OneSignal push notification init
-  OneSignal.initialize(OneSignalConfig.appId);
-  OneSignal.Notifications.requestPermission(true);
+  if (!kIsWeb) {
+    OneSignal.initialize(OneSignalConfig.appId);
+    OneSignal.Notifications.requestPermission(true);
 
-  // Debug: log player ID setelah subscription ready
-  OneSignal.User.pushSubscription.addObserver((state) {
-    debugPrint('=== OneSignal Player ID: ${state.current.id} ===');
-    debugPrint('=== OneSignal opted in: ${state.current.optedIn} ===');
-  });
-  // Log current ID jika sudah ada
-  debugPrint('=== OneSignal current ID: ${OneSignal.User.pushSubscription.id} ===');
+    // Debug: log player ID setelah subscription ready
+    OneSignal.User.pushSubscription.addObserver((state) {
+      debugPrint('=== OneSignal Player ID: ${state.current.id} ===');
+      debugPrint('=== OneSignal opted in: ${state.current.optedIn} ===');
+    });
+    // Log current ID jika sudah ada
+    debugPrint('=== OneSignal current ID: ${OneSignal.User.pushSubscription.id} ===');
+  }
 
   await NotificationService().initialize();
   await NotificationService().requestPermissions();
