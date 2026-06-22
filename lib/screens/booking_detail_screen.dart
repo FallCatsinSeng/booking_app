@@ -95,14 +95,38 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
         return;
       }
       if (!mounted) return;
-      await Navigator.push<bool>(
+      final done = await Navigator.push<bool>(
         context,
         MaterialPageRoute(
           builder: (_) => PaymentScreen(redirectUrl: redirectUrl),
         ),
       );
-      // Status is confirmed server-side via the Midtrans webhook; refresh.
-      _reload();
+
+      if (done == true) {
+        _snack('Memeriksa status pembayaran...');
+        
+        // Optimistic update: Asumsikan lunas sementara karena webhook mungkin delay/gagal di local
+        setState(() {
+          _future = _future.then((b) => b.copyWith(
+                paymentStatus: 'paid',
+                statusLabel: b.status == 'pending' ? 'Menunggu Persetujuan Admin' : b.statusLabel,
+                statusColor: b.status == 'pending' ? 'orange' : b.statusColor,
+              ));
+        });
+
+        // Polling API secara diam-diam untuk sinkronisasi dengan webhook
+        for (int i = 0; i < 5; i++) {
+          await Future.delayed(const Duration(seconds: 2));
+          if (!mounted) return;
+          final b = await _api.booking(widget.code);
+          if (b.paymentStatus == 'paid') {
+            _reload();
+            return; // Selesai polling karena sudah tersinkronisasi
+          }
+        }
+      } else {
+        _reload();
+      }
     } catch (e) {
       _snack(e.toString());
     }
